@@ -1,0 +1,61 @@
+library(bcpa)
+library(stats)
+library(asytriangular)
+library(rgdal)
+
+#read in the data and create a track object
+data <- read.csv('2017_yes_meancoordinates_xy.csv', header = TRUE, sep=',') 
+data2 <- as.numeric(data$Time)
+tracks <- MakeTrack(data$xstart,data$ystart, data2)
+plot(tracks)
+
+# create a table of the movement metrics calculated from the track object
+tracks.VT <- GetVT(tracks)
+write.csv(tracks.VT, "2017_yes_metrics.csv")
+
+
+par(mfrow=c(1,2))
+a <- hist(tracks.VT$V, breaks=20, col="grey")
+b <- hist(tracks.VT$Theta, breaks=20, col="grey")
+c <- hist(tracks.VT$S, breaks=20, col="grey")
+
+
+par(bty="l")
+mu1 <- 5; mu2 <- 3
+sigma1 <- 2; sigma2 <- 1
+rho1 <- 0.5; rho2 <- 0.5
+SimTS <- function(n, mu, rho, sigma)
+{
+X.standard <- arima.sim(n, model=list(ar = rho))
+X.standard/sd(X.standard)*sigma + mu
+}
+# create time series with break at 500
+t.full <- 1:1000
+t.break <- 500
+x.full <- c(SimTS(t.break, mu1, rho1, sigma1),
+            SimTS(max(t.full)-t.break+1, mu2, rho2, sigma2))
+# subsample 100 observations and estimate
+keep <- sort(sample(1:length(x.full), 100))
+x <- x.full[keep]
+t <- t.full[keep]
+class(t)
+as.numeric(t)
+(BB <- GetBestBreak(x,t, tau=FALSE))
+
+plot(t,x, type="l")
+abline(v = 500, col=2, lwd=2, lty=2); abline(v = BB[2], col=2, lwd=2, lty=3)
+legend("topright", legend=c("true break", "estimated break"), col=2, lwd=2, lty=2:3)
+
+GetModels(x,t,BB[1], tau=FALSE)
+
+# perform the window sweep 
+tracks.ws <- WindowSweep(tracks.VT, "V*cos(Theta)", windowsize=40, progress=FALSE, K=2)
+head(tracks.ws$ws)
+
+# plot the BCPA plot as a flat BCPA 
+plot(tracks.ws, type="flat", main="2018 no calf - BCPA")
+
+# Visualise the BCPA periods on a trajectory plot. 
+PathPlot(tracks, tracks.ws, type="smooth",plotlegend = T, tauwhere = "topright", 
+         clusterwidth=3, main="BCPA - 2018 - yes calf", threshold=7, xlab="X", ylab="Y", )
+
